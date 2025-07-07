@@ -6,25 +6,24 @@ let inputId = "";
 let isReady = false; // Prevents input until the page is fully ready
 
 /**
- * Creates a 24-hour format timestamp for attendance records
- * Japan Standard Time is UTC+9, format: YYYY-MM-DD HH:MM:SS
- * CORRECTED: Returns string format, not Date object
+ * Creates a proper JST timestamp for attendance records
+ * Japan Standard Time is UTC+9, format: YYYY-MM-DDTHH:MM:SS (no milliseconds, no Z)
  */
-function create24HTimestamp() {
+function createJSTTimestamp() {
   const now = new Date();
   
-  // Get JST time by using toLocaleString with Tokyo timezone
-  const jstTime = new Date(now.toLocaleString("en-US", {timeZone: "Asia/Tokyo"}));
+  // Add 9 hours to UTC to get JST
+  const jstTime = new Date(now.getTime() + (9 * 60 * 60 * 1000));
   
-  // Format as YYYY-MM-DD HH:MM:SS in 24-hour format
-  const year = jstTime.getFullYear();
-  const month = String(jstTime.getMonth() + 1).padStart(2, '0');
-  const day = String(jstTime.getDate()).padStart(2, '0');
-  const hours = String(jstTime.getHours()).padStart(2, '0');
-  const minutes = String(jstTime.getMinutes()).padStart(2, '0');
-  const seconds = String(jstTime.getSeconds()).padStart(2, '0');
+  // Format as YYYY-MM-DDTHH:MM:SS (ISO format without milliseconds and timezone)
+  const year = jstTime.getUTCFullYear();
+  const month = String(jstTime.getUTCMonth() + 1).padStart(2, '0');
+  const day = String(jstTime.getUTCDate()).padStart(2, '0');
+  const hours = String(jstTime.getUTCHours()).padStart(2, '0');
+  const minutes = String(jstTime.getUTCMinutes()).padStart(2, '0');
+  const seconds = String(jstTime.getUTCSeconds()).padStart(2, '0');
   
-  return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
+  return `${year}-${month}-${day}T${hours}:${minutes}:${seconds}`;
 }
 
 /**
@@ -53,14 +52,13 @@ function handleInput(num) {
 }
 
 /**
- * Updates student attendance record with 24-hour timestamp and email notifications
+ * Updates student attendance record with JST timestamp and email notifications
  * Records user input actions and sends notifications to parents
- * CORRECTED: Ensures proper date format and type field
  */
 async function updateAttendanceWithNotification(studentId, status) {
   try {
-    console.log("=== UPDATING ATTENDANCE WITH CORRECTED TIMESTAMP ===");
-    console.log(`Student ID: ${studentId}, Status: ${status}`);
+    console.log("=== UPDATING ATTENDANCE WITH JST TIMESTAMP ===");
+    console.log(`Student childId: ${studentId}, Status: ${status}`);
     
     // Get current student data from database
     const studentResult = await wixData.query("Students")
@@ -76,19 +74,19 @@ async function updateAttendanceWithNotification(studentId, status) {
     
     let history = student.attendanceHistory || [];
     
-    // Create JST timestamp string
-    const jstTimestamp = create24HTimestamp();
+    // Create JST timestamp in correct format
+    const jstTimestamp = createJSTTimestamp();
     console.log(`JST Timestamp created: ${jstTimestamp}`);
     
-    // Add new attendance record with corrected format
-    const newRecord = {
-      date: jstTimestamp, // String format: "YYYY-MM-DD HH:MM:SS"
-      status: status,
-      type: "user-input" // Indicates this is a manual entry from ESystem page
+    // Add new attendance record with correct format
+    const attendanceRecord = {
+      date: jstTimestamp,           // JST format: YYYY-MM-DDTHH:MM:SS
+      status: status,               // login or logout
+      type: "user-input"            // Indicates manual entry from ESystem page
     };
     
-    history.push(newRecord);
-    console.log("New record to be added:", newRecord);
+    history.push(attendanceRecord);
+    console.log("New attendance record:", attendanceRecord);
     
     // Update student record in database
     const updatedStudent = {
@@ -99,11 +97,11 @@ async function updateAttendanceWithNotification(studentId, status) {
     await wixData.update("Students", updatedStudent);
     console.log("✅ Attendance record updated successfully");
     
-    // Send email notification to parents and school (only for user inputs)
+    // Send email notification to parents (only for user inputs, not system-fix)
     try {
-      console.log("=== SENDING EMAIL NOTIFICATION ===");
-      await sendAttendanceNotification(student._id, status, false);
-      console.log("✅ Email notification sent successfully");
+      console.log("=== TRIGGERING EMAIL NOTIFICATION ===");
+      await sendAttendanceNotification(student._id, status, false); // false = not system-fix
+      console.log("✅ Email notification triggered successfully");
     } catch (emailError) {
       console.error("❌ Failed to send email notification:", emailError);
       // Don't fail the attendance update if email fails
