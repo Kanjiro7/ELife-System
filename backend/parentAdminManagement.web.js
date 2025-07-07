@@ -26,12 +26,14 @@ export const getAllMembers = webMethod(
                 firstName: member.firstName || '',
                 lastName: member.lastName || '',
                 email: member.loginEmail || member.email || '',
-                displayName: `${member.firstName || ''} ${member.lastName || ''}`.trim() || member.loginEmail || member.email || 'Unknown Member'
+                displayName: `${member.firstName || ''} ${member.lastName || ''}`.trim() || 
+                           member.loginEmail || member.email || 'Unknown Member'
             }));
 
             return {
                 success: true,
-                members: formattedMembers
+                members: formattedMembers,
+                count: formattedMembers.length
             };
 
         } catch (error) {
@@ -48,6 +50,10 @@ export const checkExistingParent = webMethod(
     Permissions.SiteMember,
     async (email) => {
         try {
+            if (!email) {
+                throw new Error("Email is required");
+            }
+
             const result = await wixData.query("Parents")
                 .eq("email", email)
                 .include("assignedStudents")
@@ -87,7 +93,7 @@ export const getStudentNamesByIds = webMethod(
 
             const students = result.items.map(student => ({
                 _id: student._id,
-                name: student.name
+                name: student.name || 'Unknown Student'
             }));
 
             return {
@@ -104,7 +110,7 @@ export const getStudentNamesByIds = webMethod(
 
 /**
  * Create or update parent record with role and badge assignment
- * CORRECTED: Using badges.assignMembers instead of badges.assignBadge
+ * Uses corrected badges.assignMembers API
  */
 export const createOrUpdateParent = webMethod(
     Permissions.SiteMember,
@@ -125,6 +131,12 @@ export const createOrUpdateParent = webMethod(
                 throw new Error("Invalid relationship. Must be Mum, Dad, or Other");
             }
 
+            // Validate email format
+            const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+            if (!emailRegex.test(email)) {
+                throw new Error("Invalid email format");
+            }
+
             // Check if parent already exists
             const existingResult = await wixData.query("Parents")
                 .eq("email", email)
@@ -136,12 +148,12 @@ export const createOrUpdateParent = webMethod(
                 relationship: relationship,
                 phone: phone || '',
                 address: address || '',
-                memberReference: memberId,
-                assignedStudents: assignedStudentIds || []
+                memberReference: memberId
             };
 
             let result;
             let message;
+            let isUpdate = false;
 
             if (existingResult.items.length > 0) {
                 // Update existing parent
@@ -150,12 +162,31 @@ export const createOrUpdateParent = webMethod(
                 
                 result = await wixData.update("Parents", parentRecord);
                 message = "Parent updated successfully";
+                isUpdate = true;
                 console.log("Parent updated");
             } else {
                 // Create new parent
                 result = await wixData.insert("Parents", parentRecord);
                 message = "Parent created successfully";
                 console.log("Parent created");
+            }
+
+            // Handle student assignments separately
+            if (assignedStudentIds && assignedStudentIds.length > 0) {
+                try {
+                    await wixData.replaceReferences("Parents", result._id, "assignedStudents", assignedStudentIds);
+                    console.log("Student assignments updated");
+                } catch (studentsError) {
+                    console.error("Error updating student assignments:", studentsError);
+                }
+            } else {
+                // Clear all student assignments if none provided
+                try {
+                    await wixData.removeReference("Parents", result._id, "assignedStudents");
+                    console.log("Student assignments cleared");
+                } catch (clearError) {
+                    console.error("Error clearing student assignments:", clearError);
+                }
             }
 
             // Assign role with elevated permissions
@@ -168,10 +199,10 @@ export const createOrUpdateParent = webMethod(
                 // Continue execution even if role assignment fails
             }
 
-            // CORRECTED: Assign badge using assignMembers instead of assignBadge
+            // Assign badge using corrected assignMembers API
             try {
                 const elevatedAssignMembers = elevate(badges.assignMembers);
-                await elevatedAssignMembers(PARENT_BADGE_ID, [memberId]); // Array of member IDs required
+                await elevatedAssignMembers(PARENT_BADGE_ID, [memberId]);
                 console.log("Badge assigned successfully");
             } catch (badgeError) {
                 console.error("Badge assignment failed:", badgeError);
@@ -181,7 +212,9 @@ export const createOrUpdateParent = webMethod(
             return {
                 success: true,
                 parentId: result._id,
-                message: message
+                message: message,
+                isUpdate: isUpdate,
+                assignedStudents: assignedStudentIds?.length || 0
             };
 
         } catch (error) {
@@ -201,31 +234,42 @@ export const removeParent = webMethod(
             console.log("=== REMOVING PARENT ===");
             console.log(`Parent ID: ${parentId}, Member ID: ${memberId}`);
 
+            if (!parentId) {
+                throw new Error("Parent ID is required");
+            }
+
+            // Get parent data before removal for logging
+            const parentData = await wixData.get("Parents", parentId);
+            console.log(`Removing parent: ${parentData.parentName}`);
+
             // Remove parent record
             await wixData.remove("Parents", parentId);
             console.log("Parent record removed");
 
-            // Remove role assignment
-            try {
-                const elevatedRemoveRole = elevate(authorization.removeRole);
-                await elevatedRemoveRole(PARENT_ROLE_ID, memberId);
-                console.log("Role removed successfully");
-            } catch (roleError) {
-                console.error("Role removal failed:", roleError);
-            }
+            // Remove role assignment if memberId provided
+            if (memberId) {
+                try {
+                    const elevatedRemoveRole = elevate(authorization.removeRole);
+                    await elevatedRemoveRole(PARENT_ROLE_ID, memberId);
+                    console.log("Role removed successfully");
+                } catch (roleError) {
+                    console.error("Role removal failed:", roleError);
+                }
 
-            // Remove badge assignment
-            try {
-                const elevatedRemoveMembers = elevate(badges.removeMembers);
-                await elevatedRemoveMembers(PARENT_BADGE_ID, [memberId]);
-                console.log("Badge removed successfully");
-            } catch (badgeError) {
-                console.error("Badge removal failed:", badgeError);
+                // Remove badge assignment
+                try {
+                    const elevatedRemoveMembers = elevate(badges.removeMembers);
+                    await elevatedRemoveMembers(PARENT_BADGE_ID, [memberId]);
+                    console.log("Badge removed successfully");
+                } catch (badgeError) {
+                    console.error("Badge removal failed:", badgeError);
+                }
             }
 
             return {
                 success: true,
-                message: "Parent removed successfully"
+                message: "Parent removed successfully",
+                removedParent: parentData.parentName
             };
 
         } catch (error) {
@@ -246,6 +290,7 @@ export const getAllParents = webMethod(
 
             const result = await wixData.query("Parents")
                 .include("assignedStudents")
+                .ascending("parentName")
                 .find();
 
             const parentsWithStudents = result.items.map(parent => ({
@@ -253,17 +298,19 @@ export const getAllParents = webMethod(
                 parentName: parent.parentName,
                 email: parent.email,
                 relationship: parent.relationship,
-                phone: parent.phone,
-                address: parent.address,
+                phone: parent.phone || '',
+                address: parent.address || '',
                 memberReference: parent.memberReference,
                 assignedStudents: parent.assignedStudents || [],
+                studentCount: (parent.assignedStudents || []).length,
                 createdDate: parent._createdDate,
                 updatedDate: parent._updatedDate
             }));
 
             return {
                 success: true,
-                parents: parentsWithStudents
+                parents: parentsWithStudents,
+                totalCount: parentsWithStudents.length
             };
 
         } catch (error) {
@@ -294,9 +341,32 @@ export const validateParentMemberReferences = webMethod(
                 withoutMemberReference: 0,
                 invalidReferences: 0,
                 validReferences: 0,
+                duplicateEmails: 0,
                 issues: []
             };
+
+            // Check for duplicate emails
+            const emailCounts = {};
+            parentsResult.items.forEach(parent => {
+                if (parent.email) {
+                    emailCounts[parent.email] = (emailCounts[parent.email] || 0) + 1;
+                }
+            });
+
+            // Identify duplicates
+            for (const [email, count] of Object.entries(emailCounts)) {
+                if (count > 1) {
+                    validationResults.duplicateEmails++;
+                    validationResults.issues.push({
+                        type: "duplicate_email",
+                        email: email,
+                        occurrences: count,
+                        issue: `Email ${email} is used by ${count} parent records`
+                    });
+                }
+            }
             
+            // Validate member references
             for (const parent of parentsResult.items) {
                 if (parent.memberReference) {
                     validationResults.withMemberReference++;
@@ -311,6 +381,7 @@ export const validateParentMemberReferences = webMethod(
                     } else {
                         validationResults.invalidReferences++;
                         validationResults.issues.push({
+                            type: "invalid_member_reference",
                             parentId: parent._id,
                             parentName: parent.parentName,
                             issue: "Member reference points to non-existent member",
@@ -320,6 +391,7 @@ export const validateParentMemberReferences = webMethod(
                 } else {
                     validationResults.withoutMemberReference++;
                     validationResults.issues.push({
+                        type: "missing_member_reference",
                         parentId: parent._id,
                         parentName: parent.parentName,
                         issue: "No member reference assigned",
@@ -337,6 +409,71 @@ export const validateParentMemberReferences = webMethod(
         } catch (error) {
             console.error("Error validating parent member references:", error);
             throw new Error(`Validation failed: ${error.message}`);
+        }
+    }
+);
+
+/**
+ * Get parent statistics for admin dashboard
+ */
+export const getParentStatistics = webMethod(
+    Permissions.SiteMember,
+    async () => {
+        try {
+            const elevatedQuery = elevate(wixData.query);
+            
+            // Get all parents
+            const parentsResult = await elevatedQuery("Parents")
+                .include("assignedStudents")
+                .find();
+            
+            const stats = {
+                totalParents: parentsResult.items.length,
+                parentsWithStudents: 0,
+                parentsWithoutStudents: 0,
+                totalStudentAssignments: 0,
+                relationshipBreakdown: {
+                    Mum: 0,
+                    Dad: 0,
+                    Other: 0
+                },
+                recentlyCreated: 0
+            };
+            
+            const oneWeekAgo = new Date();
+            oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
+            
+            parentsResult.items.forEach(parent => {
+                // Count student assignments
+                const studentCount = (parent.assignedStudents || []).length;
+                stats.totalStudentAssignments += studentCount;
+                
+                if (studentCount > 0) {
+                    stats.parentsWithStudents++;
+                } else {
+                    stats.parentsWithoutStudents++;
+                }
+                
+                // Relationship breakdown
+                if (parent.relationship && stats.relationshipBreakdown.hasOwnProperty(parent.relationship)) {
+                    stats.relationshipBreakdown[parent.relationship]++;
+                }
+                
+                // Recently created
+                if (parent._createdDate && new Date(parent._createdDate) > oneWeekAgo) {
+                    stats.recentlyCreated++;
+                }
+            });
+            
+            return {
+                success: true,
+                statistics: stats,
+                timestamp: new Date().toISOString()
+            };
+            
+        } catch (error) {
+            console.error("Error getting parent statistics:", error);
+            throw new Error(`Failed to get statistics: ${error.message}`);
         }
     }
 );
