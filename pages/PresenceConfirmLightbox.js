@@ -93,23 +93,28 @@ async function directAttendanceUpdate(student, nextAction) {
 
 /**
  * Lightbox initialization and main functionality
- * Handles student lookup and attendance confirmation with proper loading element management
+ * Handles student lookup and attendance confirmation with proper element management
  */
 $w.onReady(function () {
-    const context = wixWindow.lightbox.getContext();
+    console.log("=== PRESENCE CONFIRM LIGHTBOX INITIALIZATION ===");
     
-    // CRITICAL: Hide loading element immediately at lightbox opening
-    // Since collapsed state was removed from editor, we manage it entirely from code
-    if ($w("#loading")) {
-        $w("#loading").collapsed = true; // Hide loading element by default
-        console.log("Loading element hidden at lightbox initialization");
+    // CRITICAL: Hide loading element IMMEDIATELY as first operation
+    // This prevents the loading element from being visible at lightbox opening
+    try {
+        if ($w("#loading")) {
+            $w("#loading").hide(); // Use .hide() for reliable hiding
+            console.log("✅ Loading element hidden at initialization");
+        }
+    } catch (error) {
+        console.error("❌ Error hiding loading element:", error);
     }
+    
+    const context = wixWindow.lightbox.getContext();
     
     if (context && context.childId) {
         childId = context.childId;
         updateAttendanceFunction = context.updateAttendanceFunction; // Store the function reference
         
-        console.log("=== PRESENCE CONFIRM LIGHTBOX OPENED ===");
         console.log("Child ID:", childId);
         console.log("Update function available:", !!updateAttendanceFunction);
         
@@ -118,51 +123,78 @@ $w.onReady(function () {
             .eq("childId", childId)
             .find()
             .then((results) => {
+                console.log("Database query completed, results:", results.items.length);
+                
                 if (results.items.length > 0) {
                     student = results.items[0];
-                    console.log("Student found:", student.name);
+                    console.log("✅ Student found:", student.name);
                     
                     // Get student name with fallback for safety
                     let nameSurname = (typeof student.name === "string" && student.name.trim().length > 0) ?
                         student.name.trim() :
                         "Student";
                     
+                    console.log("Student name processed:", nameSurname);
+                    
                     // Determine next action based on last attendance record
                     let history = student.attendanceHistory || [];
                     let last = history.length > 0 ? history[history.length - 1] : null;
+                    
+                    console.log("Attendance history length:", history.length);
+                    console.log("Last attendance record:", last);
 
-                    // UPDATED: Multi-line message format with enhanced spacing and colors
+                    // Create multi-line message format with enhanced spacing and colors
                     let message = "";
                     if (last && last.status === "login") {
                         nextAction = "logout";
                         // Orange color for LOGOUT with styled student name and multi-line format
                         message = `<span class="txtConfirm">Hey </span><br><span style="color:#2A7C6F;font-weight:bold;">${nameSurname}</span><br></span><br>Do you want to </span><br><span style="color:#DC5A26;font-weight:bold;">LOG OUT</span>?</span>`;
+                        console.log("🔄 Action determined: LOGOUT");
                     } else {
                         nextAction = "login";
                         // Green color for LOGIN with styled student name and multi-line format
                         message = `<span class="txtConfirm">Welcome </span><br><span style="color:#2A7C6F;font-weight:bold;">${nameSurname}</span><br></span><br>Do you want to </span><br><span style="color:#2AAD56;font-weight:bold;">LOG IN</span>?</span>`;
+                        console.log("🔄 Action determined: LOGIN");
                     }
                     
-                    console.log("Next action determined:", nextAction);
+                    console.log("Generated message:", message);
                     
-                    // Update UI with multi-line colored message
-                    $w("#txtConfirm").html = message;
+                    // CRITICAL: Update UI with custom message to override editor default
+                    try {
+                        $w("#txtConfirm").html = message;
+                        console.log("✅ Message set in txtConfirm element");
+                        
+                        // Verify message was set correctly
+                        setTimeout(() => {
+                            const currentHtml = $w("#txtConfirm").html;
+                            console.log("Message verification - current HTML:", currentHtml);
+                        }, 100);
+                        
+                    } catch (error) {
+                        console.error("❌ Error setting message:", error);
+                        // Fallback to plain text if HTML fails
+                        $w("#txtConfirm").text = `${nameSurname} - ${nextAction.toUpperCase()}`;
+                    }
+                    
+                    // Enable confirm button
                     $w("#btnConfirm").enable();
+                    console.log("✅ Confirm button enabled");
+                    
                 } else {
-                    console.log("Student not found for childId:", childId);
+                    console.log("❌ Student not found for childId:", childId);
                     // Error message with consistent styling
                     $w("#txtConfirm").html = `<span class="txtConfirm">ID not found!</span>`;
                     $w("#btnConfirm").disable();
                 }
             })
             .catch((error) => {
-                console.error("Error querying student:", error);
+                console.error("❌ Database query error:", error);
                 // Error message with consistent styling
                 $w("#txtConfirm").html = `<span class="txtConfirm">Error loading student data!</span>`;
                 $w("#btnConfirm").disable();
             });
     } else {
-        console.log("No context or childId provided");
+        console.log("❌ No context or childId provided");
         // Error message with consistent styling
         $w("#txtConfirm").html = `<span class="txtConfirm">No ID provided!</span>`;
         $w("#btnConfirm").disable();
@@ -171,22 +203,26 @@ $w.onReady(function () {
     // Confirm button with immediate loading display and proper field preservation
     $w("#btnConfirm").onClick(async () => {
         if (!student || !nextAction) {
-            console.error("Missing student or nextAction");
+            console.error("❌ Missing student or nextAction data");
             return;
         }
 
         try {
             console.log("=== CONFIRMING ATTENDANCE ===");
-            console.log(`Processing ${nextAction} for student:`, student.name);
+            console.log(`Processing ${nextAction} for student: ${student.name}`);
             
             // Disable confirm button to prevent double-clicks
             $w("#btnConfirm").disable();
+            console.log("Confirm button disabled");
             
-            // CRITICAL: Show loading element IMMEDIATELY by removing collapsed state
-            // This ensures instant visibility for short processing times
-            if ($w("#loading")) {
-                $w("#loading").collapsed = false; // Show loading immediately
-                console.log("Loading element shown immediately on button click");
+            // CRITICAL: Show loading element IMMEDIATELY
+            try {
+                if ($w("#loading")) {
+                    $w("#loading").show(); // Use .show() for reliable display
+                    console.log("✅ Loading element shown");
+                }
+            } catch (error) {
+                console.error("❌ Error showing loading element:", error);
             }
 
             if (updateAttendanceFunction) {
@@ -196,7 +232,7 @@ $w.onReady(function () {
                 console.log("✅ Attendance updated via main function with email notification");
             } else {
                 // Fallback: Direct database update with field preservation
-                console.log("Fallback: Direct database update with field preservation");
+                console.log("Using fallback: Direct database update with field preservation");
                 await directAttendanceUpdate(student, nextAction);
                 console.log("✅ Attendance updated via fallback (no email notification)");
             }
@@ -214,11 +250,16 @@ $w.onReady(function () {
             
             // Re-enable button on error for retry
             $w("#btnConfirm").enable();
+            console.log("Confirm button re-enabled due to error");
             
-            // CRITICAL: Hide loading element on error by setting collapsed state
-            if ($w("#loading")) {
-                $w("#loading").collapsed = true; // Hide loading on error
-                console.log("Loading element hidden due to error");
+            // CRITICAL: Hide loading element on error
+            try {
+                if ($w("#loading")) {
+                    $w("#loading").hide(); // Use .hide() for reliable hiding
+                    console.log("Loading element hidden due to error");
+                }
+            } catch (hideError) {
+                console.error("❌ Error hiding loading element:", hideError);
             }
             
             // Show error message with red color styling
@@ -231,4 +272,6 @@ $w.onReady(function () {
         console.log("Attendance confirmation cancelled");
         closeLightboxWithFade({ success: false });
     });
+    
+    console.log("✅ Lightbox initialization completed");
 });
