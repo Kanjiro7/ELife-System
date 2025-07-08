@@ -39,6 +39,80 @@ function create24HTimestamp() {
 }
 
 /**
+ * Updates the UI elements with appropriate content based on student status
+ * Uses separate text elements to preserve editor styling and manage only status color
+ */
+function updateUIElements(nameSurname, nextAction) {
+    try {
+        console.log(`🎨 Updating UI elements for ${nextAction} action`);
+        
+        // Set greeting text based on action type
+        if (nextAction === "logout") {
+            $w("#txtGreetings").text = "Hey";
+            console.log("Set greeting: Hey (logout)");
+        } else {
+            $w("#txtGreetings").text = "Welcome";
+            console.log("Set greeting: Welcome (login)");
+        }
+        
+        // Set student name (preserves editor styling)
+        $w("#txtName").text = nameSurname;
+        console.log(`Set student name: ${nameSurname}`);
+        
+        // Set message text (preserves editor styling)
+        $w("#txtMessage").text = "do you want to";
+        console.log("Set message: do you want to");
+        
+        // Set status text with appropriate color
+        if (nextAction === "logout") {
+            $w("#txtStatus").text = "LOGOUT?";
+            $w("#txtStatus").style.color = "#DC5A26"; // Orange color for logout
+            console.log("Set status: LOGOUT? (orange color)");
+        } else {
+            $w("#txtStatus").text = "LOGIN?";
+            $w("#txtStatus").style.color = "#2AAD56"; // Green color for login
+            console.log("Set status: LOGIN? (green color)");
+        }
+        
+        console.log("✅ All UI elements updated successfully");
+        
+    } catch (error) {
+        console.error("❌ Error updating UI elements:", error);
+        // Fallback: Show error in txtGreetings if other elements fail
+        try {
+            $w("#txtGreetings").text = "Error loading data";
+            $w("#txtGreetings").style.color = "#E21C21";
+        } catch (fallbackError) {
+            console.error("❌ Fallback error display failed:", fallbackError);
+        }
+    }
+}
+
+/**
+ * Sets error message across the UI elements
+ * Displays error state when student lookup or operations fail
+ */
+function setErrorMessage(errorText) {
+    try {
+        console.log(`⚠️ Setting error message: ${errorText}`);
+        
+        // Clear other elements and show error in greeting
+        $w("#txtGreetings").text = errorText;
+        $w("#txtGreetings").style.color = "#E21C21"; // Red color for errors
+        
+        // Clear other text elements
+        $w("#txtName").text = "";
+        $w("#txtMessage").text = "";
+        $w("#txtStatus").text = "";
+        
+        console.log("✅ Error message set successfully");
+        
+    } catch (error) {
+        console.error("❌ Error setting error message:", error);
+    }
+}
+
+/**
  * Direct database update with proper field preservation
  * Used as fallback when the main update function is not available
  * Preserves all existing student fields while updating only attendance history
@@ -93,7 +167,8 @@ async function directAttendanceUpdate(student, nextAction) {
 
 /**
  * Lightbox initialization and main functionality
- * Handles student lookup and attendance confirmation with proper element management
+ * Handles student lookup and attendance confirmation with separate text elements
+ * Uses only Wix-compatible APIs for maximum compatibility
  */
 $w.onReady(function () {
     console.log("=== PRESENCE CONFIRM LIGHTBOX INITIALIZATION ===");
@@ -143,38 +218,17 @@ $w.onReady(function () {
                     console.log("Attendance history length:", history.length);
                     console.log("Last attendance record:", last);
 
-                    // Create multi-line message format with enhanced spacing and colors
-                    let message = "";
+                    // Determine next action based on last status
                     if (last && last.status === "login") {
                         nextAction = "logout";
-                        // Orange color for LOGOUT with styled student name and multi-line format
-                        message = `<span class="txtConfirm">Hey </span><br><span style="color:#2A7C6F;font-weight:bold;">${nameSurname}</span><br></span><br>Do you want to </span><br><span style="color:#DC5A26;font-weight:bold;">LOG OUT</span>?</span>`;
                         console.log("🔄 Action determined: LOGOUT");
                     } else {
                         nextAction = "login";
-                        // Green color for LOGIN with styled student name and multi-line format
-                        message = `<span class="txtConfirm">Welcome </span><br><span style="color:#2A7C6F;font-weight:bold;">${nameSurname}</span><br></span><br>Do you want to </span><br><span style="color:#2AAD56;font-weight:bold;">LOG IN</span>?</span>`;
                         console.log("🔄 Action determined: LOGIN");
                     }
                     
-                    console.log("Generated message:", message);
-                    
-                    // CRITICAL: Update UI with custom message to override editor default
-                    try {
-                        $w("#txtConfirm").html = message;
-                        console.log("✅ Message set in txtConfirm element");
-                        
-                        // Verify message was set correctly
-                        setTimeout(() => {
-                            const currentHtml = $w("#txtConfirm").html;
-                            console.log("Message verification - current HTML:", currentHtml);
-                        }, 100);
-                        
-                    } catch (error) {
-                        console.error("❌ Error setting message:", error);
-                        // Fallback to plain text if HTML fails
-                        $w("#txtConfirm").text = `${nameSurname} - ${nextAction.toUpperCase()}`;
-                    }
+                    // Update UI elements with new approach using separate text elements
+                    updateUIElements(nameSurname, nextAction);
                     
                     // Enable confirm button
                     $w("#btnConfirm").enable();
@@ -182,21 +236,21 @@ $w.onReady(function () {
                     
                 } else {
                     console.log("❌ Student not found for childId:", childId);
-                    // Error message with consistent styling
-                    $w("#txtConfirm").html = `<span class="txtConfirm">ID not found!</span>`;
+                    // Set error message using new UI approach
+                    setErrorMessage("ID not found!");
                     $w("#btnConfirm").disable();
                 }
             })
             .catch((error) => {
                 console.error("❌ Database query error:", error);
-                // Error message with consistent styling
-                $w("#txtConfirm").html = `<span class="txtConfirm">Error loading student data!</span>`;
+                // Set error message using new UI approach
+                setErrorMessage("Error loading student data!");
                 $w("#btnConfirm").disable();
             });
     } else {
         console.log("❌ No context or childId provided");
-        // Error message with consistent styling
-        $w("#txtConfirm").html = `<span class="txtConfirm">No ID provided!</span>`;
+        // Set error message using new UI approach
+        setErrorMessage("No ID provided!");
         $w("#btnConfirm").disable();
     }
 
@@ -262,8 +316,8 @@ $w.onReady(function () {
                 console.error("❌ Error hiding loading element:", hideError);
             }
             
-            // Show error message with red color styling
-            $w("#txtConfirm").html = `<span class="txtConfirm" style="color:#E21C21;">Error: ${error.message}</span>`;
+            // Show error message using new UI approach
+            setErrorMessage(`Error: ${error.message}`);
         }
     });
 
