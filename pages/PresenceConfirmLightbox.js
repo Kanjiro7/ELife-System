@@ -93,10 +93,17 @@ async function directAttendanceUpdate(student, nextAction) {
 
 /**
  * Lightbox initialization and main functionality
- * Handles student lookup and attendance confirmation with colored text messages
+ * Handles student lookup and attendance confirmation with proper loading element management
  */
 $w.onReady(function () {
     const context = wixWindow.lightbox.getContext();
+    
+    // CRITICAL: Hide loading element immediately at lightbox opening
+    // Since collapsed state was removed from editor, we manage it entirely from code
+    if ($w("#loading")) {
+        $w("#loading").collapsed = true; // Hide loading element by default
+        console.log("Loading element hidden at lightbox initialization");
+    }
     
     if (context && context.childId) {
         childId = context.childId;
@@ -124,20 +131,21 @@ $w.onReady(function () {
                     let history = student.attendanceHistory || [];
                     let last = history.length > 0 ? history[history.length - 1] : null;
 
+                    // UPDATED: Multi-line message format with enhanced spacing and colors
                     let message = "";
                     if (last && last.status === "login") {
                         nextAction = "logout";
-                        // Orange color for LOGOUT with styled student name
+                        // Orange color for LOGOUT with styled student name and multi-line format
                         message = `<span class="txtConfirm">Hey </span><br><span style="color:#2A7C6F;font-weight:bold;">${nameSurname}</span><br></span><br>Do you want to </span><br><span style="color:#DC5A26;font-weight:bold;">LOG OUT</span>?</span>`;
                     } else {
                         nextAction = "login";
-                        // Green color for LOGIN with styled student name
+                        // Green color for LOGIN with styled student name and multi-line format
                         message = `<span class="txtConfirm">Welcome </span><br><span style="color:#2A7C6F;font-weight:bold;">${nameSurname}</span><br></span><br>Do you want to </span><br><span style="color:#2AAD56;font-weight:bold;">LOG IN</span>?</span>`;
                     }
                     
                     console.log("Next action determined:", nextAction);
                     
-                    // Update UI with colored message
+                    // Update UI with multi-line colored message
                     $w("#txtConfirm").html = message;
                     $w("#btnConfirm").enable();
                 } else {
@@ -160,7 +168,7 @@ $w.onReady(function () {
         $w("#btnConfirm").disable();
     }
 
-    // Confirm button with proper database field preservation and colored error messages
+    // Confirm button with immediate loading display and proper field preservation
     $w("#btnConfirm").onClick(async () => {
         if (!student || !nextAction) {
             console.error("Missing student or nextAction");
@@ -173,7 +181,13 @@ $w.onReady(function () {
             
             // Disable confirm button to prevent double-clicks
             $w("#btnConfirm").disable();
-            $w("#btnConfirm").label = "Processing...";
+            
+            // CRITICAL: Show loading element IMMEDIATELY by removing collapsed state
+            // This ensures instant visibility for short processing times
+            if ($w("#loading")) {
+                $w("#loading").collapsed = false; // Show loading immediately
+                console.log("Loading element shown immediately on button click");
+            }
 
             if (updateAttendanceFunction) {
                 // Use the passed function (recommended - includes email notifications)
@@ -200,7 +214,12 @@ $w.onReady(function () {
             
             // Re-enable button on error for retry
             $w("#btnConfirm").enable();
-            $w("#btnConfirm").label = "Confirm";
+            
+            // CRITICAL: Hide loading element on error by setting collapsed state
+            if ($w("#loading")) {
+                $w("#loading").collapsed = true; // Hide loading on error
+                console.log("Loading element hidden due to error");
+            }
             
             // Show error message with red color styling
             $w("#txtConfirm").html = `<span class="txtConfirm" style="color:#E21C21;">Error: ${error.message}</span>`;
