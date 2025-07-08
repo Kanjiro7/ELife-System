@@ -99,6 +99,42 @@ function createAttendanceRecord(status) {
 }
 
 /**
+ * Disables page scrolling to prevent vertical movement
+ * Essential for kiosk-mode operation on tablets
+ */
+function disablePageScrolling() {
+ try {
+ // Disable scroll on document body
+ if (typeof document !== 'undefined') {
+ document.body.style.overflow = 'hidden';
+ document.documentElement.style.overflow = 'hidden';
+ 
+ // Prevent touch scroll events on mobile devices
+ document.addEventListener('touchmove', function(e) {
+ e.preventDefault();
+ }, { passive: false });
+ 
+ // Prevent scroll wheel events
+ document.addEventListener('wheel', function(e) {
+ e.preventDefault();
+ }, { passive: false });
+ 
+ // Prevent keyboard scroll (space, arrow keys)
+ document.addEventListener('keydown', function(e) {
+ const scrollKeys = [32, 33, 34, 35, 36, 37, 38, 39, 40];
+ if (scrollKeys.includes(e.keyCode)) {
+ e.preventDefault();
+ }
+ }, { passive: false });
+ 
+ console.log('✅ Page scrolling disabled successfully');
+ }
+ } catch (error) {
+ console.error('❌ Error disabling page scrolling:', error);
+ }
+}
+
+/**
  * Updates the ID display field and manages action button state
  * Provides visual feedback to user about current input
  */
@@ -271,10 +307,14 @@ async function updateAttendanceWithNotification(studentId, status) {
 
 /**
  * Page initialization and event handler setup
- * Sets up the virtual keypad and manages page state
+ * Sets up the virtual keypad, manages page state, and disables page scrolling
+ * Optimized for kiosk-mode tablet operation
  */
 $w.onReady(function () {
  console.log('=== ESYSTEM PAGE INITIALIZATION ===');
+ 
+ // Disable page scrolling for kiosk-mode operation
+ disablePageScrolling();
  
  // Disable all interactive elements during initialization
  $w("#btnAction").disable();
@@ -295,27 +335,27 @@ $w.onReady(function () {
  }
  }
 
- // Backspace button functionality
+ // Backspace button functionality for removing last digit
  $w("#btnBackspace").onClick(() => {
  if (!isReady) return;
  inputId = inputId.slice(0, -1);
  updateDisplay();
  });
 
- // Clear button functionality
+ // Clear button functionality for resetting input field
  $w("#btnClear").onClick(() => {
  if (!isReady) return;
  inputId = "";
  updateDisplay();
  });
 
- // Action button with enhanced error handling
+ // Action button with enhanced error handling and lightbox integration
  $w("#btnAction").onClick(() => {
  if (!isReady || inputId.length === 0) return;
  
  console.log(`Action button clicked with inputId: ${inputId}`);
  
- // Open confirmation lightbox with update function
+ // Open confirmation lightbox with attendance update function
  wixWindow.openLightbox("PresenceConfirmLightbox", { 
  childId: inputId,
  updateAttendanceFunction: updateAttendanceWithNotification
@@ -326,7 +366,7 @@ $w.onReady(function () {
  console.log(`✅ Attendance ${result.action} completed successfully for ${result.studentName}`);
  console.log(`Timestamp: ${result.timestamp}`);
  }
- // Reset input field after operation
+ // Reset input field after operation completion
  inputId = "";
  updateDisplay();
  })
@@ -338,10 +378,10 @@ $w.onReady(function () {
  });
  });
 
- // Initialize display
+ // Initialize display state
  updateDisplay();
 
- // Enable all interactive elements
+ // Enable all interactive elements after setup completion
  for (let i = 0; i <= 9; i++) {
  $w(`#btnNum${i}`).enable();
  }
@@ -351,7 +391,7 @@ $w.onReady(function () {
  // Show interface with smooth animation
  $w("#loginBox").show("fade", { duration: 300 });
  
- // Mark as ready for input
+ // Mark system as ready for user input
  isReady = true;
- console.log('✅ ESystem page initialization completed');
+ console.log('✅ ESystem page initialization completed with scroll blocking');
 });
