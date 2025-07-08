@@ -99,42 +99,6 @@ function createAttendanceRecord(status) {
 }
 
 /**
- * Disables page scrolling to prevent vertical movement
- * Essential for kiosk-mode operation on tablets
- */
-function disablePageScrolling() {
- try {
- // Disable scroll on document body
- if (typeof document !== 'undefined') {
- document.body.style.overflow = 'hidden';
- document.documentElement.style.overflow = 'hidden';
- 
- // Prevent touch scroll events on mobile devices
- document.addEventListener('touchmove', function(e) {
- e.preventDefault();
- }, { passive: false });
- 
- // Prevent scroll wheel events
- document.addEventListener('wheel', function(e) {
- e.preventDefault();
- }, { passive: false });
- 
- // Prevent keyboard scroll (space, arrow keys)
- document.addEventListener('keydown', function(e) {
- const scrollKeys = [32, 33, 34, 35, 36, 37, 38, 39, 40];
- if (scrollKeys.includes(e.keyCode)) {
- e.preventDefault();
- }
- }, { passive: false });
- 
- console.log('✅ Page scrolling disabled successfully');
- }
- } catch (error) {
- console.error('❌ Error disabling page scrolling:', error);
- }
-}
-
-/**
  * Updates the ID display field and manages action button state
  * Provides visual feedback to user about current input
  */
@@ -307,14 +271,11 @@ async function updateAttendanceWithNotification(studentId, status) {
 
 /**
  * Page initialization and event handler setup
- * Sets up the virtual keypad, manages page state, and disables page scrolling
- * Optimized for kiosk-mode tablet operation
+ * Sets up the virtual keypad and manages page state
+ * Optimized for tablet operation
  */
 $w.onReady(function () {
  console.log('=== ESYSTEM PAGE INITIALIZATION ===');
- 
- // Disable page scrolling for kiosk-mode operation
- disablePageScrolling();
  
  // Disable all interactive elements during initialization
  $w("#btnAction").disable();
@@ -393,5 +354,5 @@ $w.onReady(function () {
  
  // Mark system as ready for user input
  isReady = true;
- console.log('✅ ESystem page initialization completed with scroll blocking');
+ console.log('✅ ESystem page initialization completed');
 });
